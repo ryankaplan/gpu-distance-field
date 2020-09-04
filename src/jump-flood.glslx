@@ -1,0 +1,189 @@
+precision highp float;
+precision highp int;
+
+attribute vec2 aQuad;
+
+// Raw input from a user to be transformed into JFA data
+uniform sampler2D uSeedInputTexture;
+
+// Texture to hold JFA data (rg, ba pairs each holding an
+// x and y co-ordinate respectively)
+uniform sampler2D uInputTexture;
+
+// The size of the input textures, if any
+uniform vec2 uResolution;
+
+// What step size to use for the current round of JFA
+uniform int uStepSize;
+
+// The color that is *not* to be counted as seed.
+uniform vec4 uBackgroundColor;
+
+uniform bool uAntialiasedDistance;
+
+const vec4 RED = vec4(1.0, 0.0, 0.0, 1.0);
+const vec4 GREEN = vec4(0.0, 1.0, 0.0, 1.0);
+const vec4 BLUE = vec4(0.0, 0.0, 1.0, 1.0);
+const vec4 BLACK = vec4(0.0, 0.0, 0.0, 1.0);
+const vec4 WHITE = vec4(1.0, 1.0, 1.0, 1.0);
+
+// Our vertex shader for all programs.
+export void vCopyPosition() {
+  gl_Position = vec4(aQuad, 0, 1.0);
+}
+
+// 0.005 * 255 is roughly 1.2, so this will match colors
+// one digit away from each other.
+const float EPSILON = 0.005;
+
+// Return true if `a` and `b` are at most EPSILON apart
+// in any dimension.
+bool approxEqual(const vec4 a, const vec4 b) {
+  return all(
+    lessThan(abs(a - b), vec4(EPSILON))
+  );
+}
+
+bool approxEqual(const vec2 a, const vec2 b) {
+  return all(
+    lessThan(abs(a - b), vec2(EPSILON))
+  );
+}
+
+bool validUv(const vec2 uv) {
+  // This is a branch-less way of checking if uv is between 0 and 1.
+  return clamp(uv, 0., 1.) == uv;
+}
+
+const float BASE = 255.;
+
+// Encode an (x, y) coordinate into a vec4. We split each co-ordinate
+// across two color channels so that the maximum coordinate value is
+// ~65k instead of 255.
+//
+// One tricky aspect is that this encoding doesn't handle fractional
+// values and the number that we're encoding is typically gl_FragCoord.xy
+// which is at the center of a pixel and typically a value like (3.5, 3.5).
+// So we floor the number when encoding it and add .5 when decoding.
+vec4 encodePositionAsColor(in vec2 fragCoordXY) {
+  vec2 screenCoordinate = floor(fragCoordXY);
+  return vec4(
+    floor(screenCoordinate.x / BASE),
+    mod(screenCoordinate.x, BASE),
+    floor(screenCoordinate.y / BASE),
+    mod(screenCoordinate.y, BASE)
+  ) / BASE;
+}
+
+// Decodes a color value into an (x, y) coordinate.
+vec2 decodePositionFromColor(in vec4 color) {
+  color *= BASE;
+  return vec2(
+    color.x * BASE + color.y,
+    color.z * BASE + color.w
+  ) + .5;
+}
+
+// We don't have a way to encode "invalid" positions, so we treat
+// positions above 10000 as invalid. This would break on a 10000px
+// canvas but this code is probably super slow on a canvas of that
+// size so it doesn't matter.
+const float MAX_POSITION = 10000.;
+
+export void fPrepForJFA() {
+  vec2 gridUv = gl_FragCoord.xy / uResolution;
+  vec2 gridUvFlippedY = vec2(gridUv.x, 1.0 - gridUv.y);
+  vec4 pixel = texture2D(uSeedInputTexture, gridUvFlippedY);
+  if (approxEqual(pixel, uBackgroundColor)) {
+    gl_FragColor = encodePositionAsColor(vec2(MAX_POSITION + 1.));
+  } else {
+    gl_FragColor = encodePositionAsColor(gl_FragCoord.xy);
+  }
+}
+
+vec4 getNewPositionValueIfCloser(in vec4 self, in vec2 offset) {
+  vec2 gridUv = (gl_FragCoord.xy + offset) / uResolution;
+  vec4 otherCell = texture2D(uInputTexture, gridUv);
+
+  // When we're sampling outside the bounds of the texture, otherCell is
+  // likely to have position (.5, .5). This means that the distance field
+  // could be wrong in the top left of images. I haven't seen this in practice
+  // yet, but it's probably worth diving into and fixing.
+
+  vec2 selfSeedLocation = decodePositionFromColor(self);
+  vec2 otherSeedLocation = decodePositionFromColor(otherCell);
+  float selfSeedDist = distance(selfSeedLocation, gl_FragCoord.xy);
+  float otherSeedDist = distance(otherSeedLocation, gl_FragCoord.xy);
+  return selfSeedDist > otherSeedDist ? otherCell : self;
+}
+
+vec4 runJFAStep(in vec4 thisCell, in int stepSize) {
+  thisCell = getNewPositionValueIfCloser(thisCell, vec2(0, stepSize));
+  thisCell = getNewPositionValueIfCloser(thisCell, vec2(stepSize, stepSize));
+  thisCell = getNewPositionValueIfCloser(thisCell, vec2(stepSize, 0));
+  thisCell = getNewPositionValueIfCloser(thisCell, vec2(stepSize, - stepSize));
+  thisCell = getNewPositionValueIfCloser(thisCell, vec2(0, - stepSize));
+  thisCell = getNewPositionValueIfCloser(thisCell, vec2(- stepSize, - stepSize));
+  thisCell = getNewPositionValueIfCloser(thisCell, vec2(- stepSize, 0));
+  thisCell = getNewPositionValueIfCloser(thisCell, vec2(- stepSize, stepSize));
+  return thisCell;
+}
+
+// This shader does the real work of Jump-flooding.
+export void fJumpFloodOutputSeedPosition() {
+  vec2 gridUv = gl_FragCoord.xy / uResolution;
+  vec4 thisCell = texture2D(uInputTexture, gridUv);
+  gl_FragColor = runJFAStep(thisCell, uStepSize);
+}
+
+// Encodes 1024 * value as a base BASE number with
+// three digits.
+//
+// Reminder of how this works when the base is 10: given
+// the number 3197, you can get each component of it with
+// the formula `floor(3197, pow(10, n)) % 10` where n is
+// the component you want.
+//
+// ```
+// floor(3197 / pow(10, 0)) % 10 == 7
+// floor(3197 / pow(10, 1)) % 10 == 9
+// floor(3197 / pow(10, 2)) % 10 == 1
+// floor(3197 / pow(10, 3)) % 10 == 3
+// ```
+//
+// We multiply the value by 10 to support fractional
+// distances. I'm sure there's a better way to do this.
+vec4 encodeDistanceFieldValue(in float value) {
+  value = value * 1024.;
+  return vec4(
+    mod(floor(value / (BASE * BASE)), BASE),
+    mod(floor(value / BASE), BASE),
+    mod(floor(value / 1.), BASE),
+
+    // This isn't used. It's just to make sure
+    // that these pixels have alpha = 1 which
+    // is helpful for debugging.
+    BASE
+  ) / BASE;
+}
+
+export void fJumpFloodOutputDistance() {
+  vec2 gridUv = gl_FragCoord.xy / uResolution;
+  vec4 thisCell = texture2D(uInputTexture, gridUv);
+  thisCell = runJFAStep(thisCell, uStepSize);
+
+  vec4 seedImageColor = texture2D(uSeedInputTexture, vec2(gridUv.x, 1.0 - gridUv.y));
+  if (uAntialiasedDistance && seedImageColor != BLACK && seedImageColor != WHITE) {
+    // This is a grey pixel in an antialiased image. We should treat
+    // 50% grey as being distance 0 from the shape (because this would
+    // happen if the edge of the shape overlapped the center of this
+    // pixel). But for some reason that I haven't figured out, treating
+    // the value of the pixel looks a little better...
+    gl_FragColor = encodeDistanceFieldValue(seedImageColor.r);
+    return;
+  }
+
+  vec2 seedLocation = decodePositionFromColor(thisCell);
+  float dist = distance(seedLocation, gl_FragCoord.xy);
+  gl_FragColor = encodeDistanceFieldValue(dist);
+}
