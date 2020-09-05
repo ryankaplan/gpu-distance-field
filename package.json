@@ -13,7 +13,8 @@
     "build:types": "tsc -t esnext --moduleResolution node -d --emitDeclarationOnly --outFile dist/gpu-distance-field.d.ts src/gpu-distance-field.ts",
     "build:js": "rollup -c rollup.config.js",
     "build:minjs": "terser dist/gpu-distance-field.umd.js --compress --mangle > dist/gpu-distance-field.umd.min.js",
-    "build": "npm run build:shaders -s && npm run build:js -s && npm run build:minjs -s && npm run build:types -s"
+    "build": "npm run build:shaders -s && npm run build:js -s && npm run build:minjs -s && npm run build:types -s",
+    "demo": "cd demo && npm install && npm run debug"
   },
   "repository": {
     "type": "git",

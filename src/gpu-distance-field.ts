@@ -46,7 +46,7 @@ namespace JumpFloodOutput {
   };
 }
 
-export class GPUDistanceFieldGenerator {
+export class DistanceFieldGenerator {
   private _gl: WebGL.Context;
 
   // The output canvas we're rendering to, passed in at construction-time.
@@ -78,12 +78,12 @@ export class GPUDistanceFieldGenerator {
 
   private _seedInputTexture: Graphics.Texture | null = null;
 
-  constructor(canvas: HTMLCanvasElement) {
-    this._outputCanvas = canvas;
-    this._gl = new WebGL.Context(canvas);
+  constructor(outputCanvas: HTMLCanvasElement) {
+    this._outputCanvas = outputCanvas;
+    this._gl = new WebGL.Context(outputCanvas);
     this._resizeOutputCanvasAndTextures(
-      canvas.width,
-      canvas.height,
+      outputCanvas.width,
+      outputCanvas.height,
       "force-update"
     );
 

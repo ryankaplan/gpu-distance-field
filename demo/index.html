@@ -1,0 +1,48 @@
+<head>
+  <head>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+      }
+
+      .container {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: row;
+      }
+
+      #source-canvas {
+        cursor: move;
+      }
+
+      #distance-field-canvas {
+        cursor: crosshair;
+      }
+
+      .canvas {
+        width: 100%;
+        height: 100%;
+      }
+
+      #distance-label {
+        position: fixed;
+        bottom: 10px;
+        left: calc(75% - 130px);
+        background: black;
+        color: white;
+        padding: 8px;
+        border-radius: 8px;
+      }
+    </style>
+    <script type="text/javascript" src="./index.ts"></script>
+  </head>
+  <body>
+    <div class="container">
+      <canvas class="canvas" id="source-canvas"></canvas>
+      <canvas class="canvas" id="distance-field-canvas"></canvas>
+    </div>
+    <div id="distance-label">Mouse over right canvas to see distance</div>
+  </body>
+</head>
