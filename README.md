@@ -88,6 +88,11 @@ function getDistanceFromPixels(
 }
 ```
 
+## Performance tips
+
+- Each `DistanceFieldGenerator` creates WebGL resources and caches them, so if you don't need a `DistanceFieldGenerator` anymore, call `destroy()` on it to free up resources.
+- `DistanceFieldGenerator` is optimized for repeatedly calling `generateDistanceField` with input canvasses of the same size. This is much faster than creating a new `DistanceFieldGenerator` each time you need a distance field.
+
 ## Demo
 
 To run the demo included in this repo, run...
