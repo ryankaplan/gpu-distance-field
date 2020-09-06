@@ -1,6 +1,6 @@
 {
   "name": "gpu-distance-field",
-  "version": "1.0.9",
+  "version": "1.0.10",
   "description": "A WebGL library for efficiently generating distance fields of 2D images.",
   "main": "dist/gpu-distance-field.umd.js",
   "types": "dist/gpu-distance-field.d.ts",
