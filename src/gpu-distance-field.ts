@@ -2,14 +2,6 @@ import { Graphics, WebGL } from "./graphics";
 
 import * as shaders from "./shaders";
 
-// All values are between 0 and 1
-type Color = {
-  r: number;
-  g: number;
-  b: number;
-  a: number;
-};
-
 // JFA + 1 is good enough quality for most things (altohugh none of these
 // are as high quality as some other distance field generation methods).
 //
@@ -17,34 +9,11 @@ type Color = {
 // requires an extra run of JFA.
 type JumpFloodQuality = "JFA" | "JFA+1" | "JFA+2";
 
-type JumpFloodOutput = {
-  format: "distance" | "seed-position";
-  // When format is distance, assume that the original input was a black
-  // image on white background and use its antialising values to output
-  // slightly more accurate distances.
-  antialiasedDistance: boolean;
-  renderTarget: "texture" | "screen";
+type Options = {
+  //
+  outputCanvas?: HTMLCanvasElement;
+  sizeHint?: [number, number];
 };
-
-namespace JumpFloodOutput {
-  export const FOR_ANOTHER_STEP: JumpFloodOutput = {
-    format: "seed-position",
-    antialiasedDistance: false,
-    renderTarget: "texture",
-  };
-
-  export const FOR_SCREEN_NON_ANTIALIASED: JumpFloodOutput = {
-    format: "distance",
-    antialiasedDistance: false,
-    renderTarget: "screen",
-  };
-
-  export const FOR_SCREEN_ANTIALIASED: JumpFloodOutput = {
-    format: "distance",
-    antialiasedDistance: true,
-    renderTarget: "screen",
-  };
-}
 
 export class DistanceFieldGenerator {
   private _gl: WebGL.Context;
@@ -78,12 +47,26 @@ export class DistanceFieldGenerator {
 
   private _seedInputTexture: Graphics.Texture | null = null;
 
-  constructor(outputCanvas: HTMLCanvasElement) {
-    this._outputCanvas = outputCanvas;
-    this._gl = new WebGL.Context(outputCanvas);
+  constructor(options: Options = {}) {
+    if (options.outputCanvas != null) {
+      this._outputCanvas = options.outputCanvas;
+    } else {
+      this._outputCanvas = document.createElement(
+        "canvas"
+      ) as HTMLCanvasElement;
+    }
+
+    const sizeHint =
+      options.outputCanvas != null
+        ? [options.outputCanvas.width, options.outputCanvas.height]
+        : options.sizeHint != null
+        ? options.sizeHint
+        : [100, 100];
+
+    this._gl = new WebGL.Context(this._outputCanvas);
     this._resizeOutputCanvasAndTextures(
-      outputCanvas.width,
-      outputCanvas.height,
+      sizeHint[0],
+      sizeHint[1],
       "force-update"
     );
 
@@ -142,6 +125,10 @@ export class DistanceFieldGenerator {
     this._prepJumpFloodData.free();
     this._jumpFloodOutputDistance.free();
     this._jumpFloodOutputSeedPosition.free();
+  }
+
+  public outputCanvas() {
+    return this._outputCanvas;
   }
 
   private _resizeTextureIfNecessary(
@@ -218,7 +205,7 @@ export class DistanceFieldGenerator {
   // white canvas (e.g. drawn by the Canvas2D API).
   public generateDistanceField(
     inputCanvas: HTMLCanvasElement,
-    quality: JumpFloodQuality = "JFA+1"
+    quality: JumpFloodQuality = "JFA"
   ) {
     const width = inputCanvas.width;
     const height = inputCanvas.height;
@@ -436,4 +423,41 @@ function nextPowerOfTwo(n: number) {
   n |= n >> 16;
   n++;
   return n;
+}
+
+// All values are between 0 and 1
+type Color = {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+};
+
+type JumpFloodOutput = {
+  format: "distance" | "seed-position";
+  // When format is distance, assume that the original input was a black
+  // image on white background and use its antialising values to output
+  // slightly more accurate distances.
+  antialiasedDistance: boolean;
+  renderTarget: "texture" | "screen";
+};
+
+namespace JumpFloodOutput {
+  export const FOR_ANOTHER_STEP: JumpFloodOutput = {
+    format: "seed-position",
+    antialiasedDistance: false,
+    renderTarget: "texture",
+  };
+
+  export const FOR_SCREEN_NON_ANTIALIASED: JumpFloodOutput = {
+    format: "distance",
+    antialiasedDistance: false,
+    renderTarget: "screen",
+  };
+
+  export const FOR_SCREEN_ANTIALIASED: JumpFloodOutput = {
+    format: "distance",
+    antialiasedDistance: true,
+    renderTarget: "screen",
+  };
 }

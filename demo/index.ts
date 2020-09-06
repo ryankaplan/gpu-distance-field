@@ -58,7 +58,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   destCanvas.addEventListener("mousemove", destCanvasMouseMove);
 
-  generator = new DistanceFieldGenerator(destCanvas);
+  generator = new DistanceFieldGenerator({
+    outputCanvas: destCanvas,
+  });
 
   // On each animation frame, generate a distance field of whatever
   // is in source-canvas and store it in the distance-field canvas.
