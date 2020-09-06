@@ -7,7 +7,7 @@ Caveats:
 - It generates unsigned distance fields (not SDFs).
 - It's output is lower quality than CPU methods like [TinySDF](https://github.com/mapbox/tiny-sdf).
 
-Here's a GIF of the demo in this folder which generates a distance field of the canvas on the left and lets you sample distances in Javascript.
+Here's a GIF of the demo in this repo which generates a distance field of the canvas on the left and lets you sample distances in Javascript.
 
 ![Demo GIF](/static/demo.gif)
 
@@ -45,7 +45,7 @@ float getDistanceValue(in vec2 uv) {
 
 **In Javascript**
 
-Sampling via JS is slower but you can do it. Call `generator.readPixels()` and using the helper below. You can see this in practice in the `demo` folder.
+Sampling via JS is slower but you can do it. Call `generator.readPixels()` and use the helper below. You can see this in practice in the `demo` folder.
 
 ```typescript
 // Returns the distance from a particular coordinate
