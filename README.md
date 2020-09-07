@@ -99,7 +99,7 @@ To run the demo included in this repo, run...
 
 ```
 npm install
-npm run demo
+npm run js-demo
 ```
 
 Then open `localhost:1234` in a browser.

@@ -1,4 +1,4 @@
-import { DistanceFieldGenerator } from "../src/gpu-distance-field";
+import { DistanceFieldGenerator } from "../../src/gpu-distance-field";
 
 // Returns the distance from a particular coordinate on the canvas to
 // the nearest shape, as determined by the distance field.

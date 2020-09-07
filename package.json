@@ -14,7 +14,7 @@
     "build:js": "rollup -c rollup.config.js",
     "build:minjs": "terser dist/gpu-distance-field.umd.js --compress --mangle > dist/gpu-distance-field.umd.min.js",
     "build": "npm run build:shaders -s && npm run build:js -s && npm run build:minjs -s && npm run build:types -s",
-    "demo": "cd demo && npm install && npm run debug"
+    "js-demo": "cd demos/js-api && npm install && npm run debug"
   },
   "repository": {
     "type": "git",
