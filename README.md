@@ -34,12 +34,15 @@ There are two ways to access the generated distance field...
 Upload `generator.outputCanvas()` to a texture and sample it like so...
 
 ```glsl
+const float BASE = 255.;
+const float BASE_2 = BASE * BASE;
+const float BASE_3 = BASE * BASE * BASE;
+
 // Returns the distance value stored in the distance
 // field at a particular uv coordinate.
 float getDistanceValue(in vec2 uv) {
-  vec4 value = texture2D(uDistanceFieldTex, uv);
-  value *= BASE;
-  return (value.x * BASE * BASE + value.y * BASE + value.z) / 1024.;
+  vec4 value = texture2D(uTexture, uv) * BASE;
+  return (value.x * BASE_2 + value.y * BASE + value.z - BASE_3 / 2.) / 1024.;
 }
 ```
 
@@ -84,12 +87,15 @@ function getDistanceFromPixels(
   // The rgb values of each pixel store the distance as
   // a base 255 number multiplied by 1024.
   const BASE = 255;
-  return (r * BASE * BASE + g * BASE + b) / 1024;
+  const BASE_2 = BASE * BASE;
+  const BASE_3 = BASE_2 * BASE;
+  return (r * BASE_2 + g * BASE + b - BASE_3 / 2) / 1024;
 }
 ```
 
-## Performance tips
+## Tips
 
+- To support [code that renders text using signed distance fields](https://mortoray.com/2015/06/19/antialiasing-with-a-signed-distance-field/), we assign the inside of shapes a distance `-.5`. Only the exact edges of shapes have distance `0`.
 - Each `DistanceFieldGenerator` creates WebGL resources and caches them, so if you don't need a `DistanceFieldGenerator` anymore, call `destroy()` on it to free up resources.
 - `DistanceFieldGenerator` is optimized for repeatedly calling `generateDistanceField` with input canvasses of the same size. This is much faster than creating a new `DistanceFieldGenerator` each time you need a distance field.
 

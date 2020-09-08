@@ -136,10 +136,21 @@ export void fJumpFloodOutputSeedPosition() {
   gl_FragColor = runJFAStep(thisCell, uStepSize);
 }
 
-// Encodes 1024 * value as a base BASE number with
-// three digits.
+// Encodes `value` as an rgb color value as a custom
+// floating point number format. I'm sure there's a
+// better way to do this, but for now each component
+// of the number stores a base-255 digit.
 //
-// Reminder of how this works when the base is 10: given
+// To store negative numbers, we add half of the maximum
+// representable number (BASE ^ 3 / 2) to each value
+// before encoding it, and subtract it when decoding it.
+//
+// To store floating point numbers, we multiply each
+// value by 1024 before encoding it and divide by 1024
+// before decoding it.
+//
+// In case you've forgotten how to encode numbers in an
+// arbitrary base, here's an example in base 10. Given
 // the number 3197, you can get each component of it with
 // the formula `floor(3197, pow(10, n)) % 10` where n is
 // the component you want.
@@ -154,9 +165,13 @@ export void fJumpFloodOutputSeedPosition() {
 // We multiply the value by 10 to support fractional
 // distances. I'm sure there's a better way to do this.
 vec4 encodeDistanceFieldValue(in float value) {
-  value = value * 1024.;
+  const float BASE_2 = BASE * BASE;
+  const float BASE_3 = BASE * BASE_2;
+
+  value *= 1024.;
+  value += (BASE_3 / 2.);
   return vec4(
-    mod(floor(value / (BASE * BASE)), BASE),
+    mod(floor(value / (BASE_2)), BASE),
     mod(floor(value / BASE), BASE),
     mod(floor(value / 1.), BASE),
 
@@ -177,13 +192,15 @@ export void fJumpFloodOutputDistance() {
     // This is a grey pixel in an antialiased image. We should treat
     // 50% grey as being distance 0 from the shape (because this would
     // happen if the edge of the shape overlapped the center of this
-    // pixel). But for some reason that I haven't figured out, treating
-    // the value of the pixel looks a little better...
+    // pixel). Black is distance - .5 and white is distance .5.
     gl_FragColor = encodeDistanceFieldValue(seedImageColor.r);
     return;
   }
 
   vec2 seedLocation = decodePositionFromColor(thisCell);
   float dist = distance(seedLocation, gl_FragCoord.xy);
+  if (dist < EPSILON) {
+    dist = - .5;
+  }
   gl_FragColor = encodeDistanceFieldValue(dist);
 }

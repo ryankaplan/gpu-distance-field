@@ -203,6 +203,9 @@ export class DistanceFieldGenerator {
 
   // Generates a distance field for antialiased black shapes drawn on a
   // white canvas (e.g. drawn by the Canvas2D API).
+  //
+  // The edge of shapes has distance 0 and the inside of shapes has
+  // distance -.5.
   public generateDistanceField(
     inputCanvas: HTMLCanvasElement,
     quality: JumpFloodQuality = "JFA"
