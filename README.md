@@ -42,7 +42,7 @@ const float BASE_3 = BASE * BASE * BASE;
 // field at a particular uv coordinate.
 float getDistanceValue(in vec2 uv) {
   vec4 value = texture2D(uTexture, uv) * BASE;
-  return (value.x * BASE_2 + value.y * BASE + value.z - BASE_3 / 2.) / 1024.;
+  return (value.x * BASE_2 + value.y * BASE + value.z - BASE_3 / 2.) / 1000.;
 }
 ```
 
@@ -85,11 +85,12 @@ function getDistanceFromPixels(
   const b = pixels[redPixelIndex + 2];
 
   // The rgb values of each pixel store the distance as
-  // a base 255 number multiplied by 1024.
+  // a base 255 number added to BASE ^ 3 / 2 and multiplied
+  // by 1000.
   const BASE = 255;
   const BASE_2 = BASE * BASE;
   const BASE_3 = BASE_2 * BASE;
-  return (r * BASE_2 + g * BASE + b - BASE_3 / 2) / 1024;
+  return (r * BASE_2 + g * BASE + b - BASE_3 / 2) / 1000;
 }
 ```
 

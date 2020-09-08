@@ -28,12 +28,13 @@ function getDistanceFromPixels(
   const g = pixels[redPixelIndex + 1];
   const b = pixels[redPixelIndex + 2];
 
-  // The rgb values of each pixel store the distance as a base 255
-  // number multiplied by 1024.
+  // The rgb values of each pixel store the distance as
+  // a base 255 number added to BASE ^ 3 / 2 and multiplied
+  // by 1000.
   const BASE = 255;
   const BASE_2 = BASE * BASE;
   const BASE_3 = BASE_2 * BASE;
-  return (r * BASE_2 + g * BASE + b - BASE_3 / 2) / 1024;
+  return (r * BASE_2 + g * BASE + b - BASE_3 / 2) / 1000;
 }
 
 // Global state

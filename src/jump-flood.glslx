@@ -146,7 +146,7 @@ export void fJumpFloodOutputSeedPosition() {
 // before encoding it, and subtract it when decoding it.
 //
 // To store floating point numbers, we multiply each
-// value by 1024 before encoding it and divide by 1024
+// value by 1000 before encoding it and divide by 1000
 // before decoding it.
 //
 // In case you've forgotten how to encode numbers in an
@@ -168,7 +168,7 @@ vec4 encodeDistanceFieldValue(in float value) {
   const float BASE_2 = BASE * BASE;
   const float BASE_3 = BASE * BASE_2;
 
-  value *= 1024.;
+  value *= 1000.;
   value += (BASE_3 / 2.);
   return vec4(
     mod(floor(value / (BASE_2)), BASE),
