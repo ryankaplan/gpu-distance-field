@@ -1,13 +1,10 @@
 # gpu-distance-field
 
-This library efficiently generates distance fields of 2D images using an approach called [Jump Flooding](http://rykap.com/graphics/skew/2016/02/25/voronoi-diagrams/). It has no dependencies and doesn't use any WebGL extensions, and its performance and quality are optimized for games and 2D graphics demos. On many systems its fast enough to generate distance fields for content that changes at 60fps.
+This library generates signed distance fields of antialiased black and white images using an approach called [Jump Flooding](http://rykap.com/graphics/skew/2016/02/25/voronoi-diagrams/).
 
-Caveats:
+It has no dependencies and doesn't use any WebGL extensions, and its performance and quality are optimized for games and 2D graphics demos. On many systems its fast enough to generate distance fields for content that changes at 60fps. The performance comes at a cost though -- it's output is lower quality than CPU methods like [TinySDF](https://github.com/mapbox/tiny-sdf).
 
-- It generates unsigned distance fields (not SDFs).
-- It's output is lower quality than CPU methods like [TinySDF](https://github.com/mapbox/tiny-sdf).
-
-Here's a GIF of the demo in this repo which generates a distance field of the canvas on the left and lets you sample distances in Javascript.
+Below is a GIF of one of the demos in this repo which generates a distance field of the canvas on the left and lets you sample distances in Javascript.
 
 ![Demo GIF](/static/demo.gif)
 
@@ -17,21 +14,25 @@ Here's a GIF of the demo in this repo which generates a distance field of the ca
 
 ## How to use it
 
-Add code like the following to your project...
+Add code like this to your project...
 
 ```typescript
-const generator = new DistanceFieldGenerator();
+import { DistanceFieldGenerator } from 'gpu-distance-field'
 
-// sourceCanvas must contain black shapes on a white
-// background.
-generator.generateDistanceField(sourceCanvas);
+// sourceCanvas contains anti-aliased black shapes on a white
+// background (e.g. drawn by Canvas2D).
+const sourceCanvas = ...
+
+// Generate the SDF
+const generator = new DistanceFieldGenerator();
+generator.generateSDF(sourceCanvas);
 ```
 
 There are two ways to access the generated distance field...
 
 **In GLSL**
 
-Upload `generator.outputCanvas()` to a texture and sample it like so...
+Upload `generator.outputCanvas()` to a WebGL texture and sample it like so...
 
 ```glsl
 const float BASE = 255.;
@@ -46,9 +47,11 @@ float getDistanceValue(in vec2 uv) {
 }
 ```
 
+You can see this in the `gl-api` demo.
+
 **In Javascript**
 
-Sampling via JS is slower but you can do it. Call `generator.readPixels()` and use the helper below. You can see this in practice in the `demo` folder.
+Sampling via JS is slower but you can do it. Call `generator.readPixels()` and use the helper below. You can see this in action in the `js-api` demo.
 
 ```typescript
 // Returns the distance from a particular coordinate
@@ -96,17 +99,25 @@ function getDistanceFromPixels(
 
 ## Tips
 
-- To support [code that renders text using signed distance fields](https://mortoray.com/2015/06/19/antialiasing-with-a-signed-distance-field/), we assign the inside of shapes a distance `-.5`. Only the exact edges of shapes have distance `0`.
 - Each `DistanceFieldGenerator` creates WebGL resources and caches them, so if you don't need a `DistanceFieldGenerator` anymore, call `destroy()` on it to free up resources.
-- `DistanceFieldGenerator` is optimized for repeatedly calling `generateDistanceField` with input canvasses of the same size. This is much faster than creating a new `DistanceFieldGenerator` each time you need a distance field.
+- `DistanceFieldGenerator` is optimized for repeatedly calling `generateSDF` with input canvasses of the same size. This is much faster than creating a new `DistanceFieldGenerator` each time you need a distance field.
 
 ## Demo
 
-To run the demo included in this repo, run...
+There are two demos in this repo. To run the one that demonstrates the JS API, run...
 
 ```
 npm install
 npm run js-demo
 ```
 
-Then open `localhost:1234` in a browser.
+...and open `localhost:1234` in a browser.
+
+Similarly, to run the demo that demonstrates the WebGL API, run...
+
+```
+npm install
+npm run gl-demo
+```
+
+...and open `localhost:1234` in a browser.

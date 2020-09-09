@@ -10,7 +10,6 @@ import * as shaders from "./shaders";
 type JumpFloodQuality = "JFA" | "JFA+1" | "JFA+2";
 
 type Options = {
-  //
   outputCanvas?: HTMLCanvasElement;
   sizeHint?: [number, number];
 };
@@ -201,12 +200,9 @@ export class DistanceFieldGenerator {
     }
   }
 
-  // Generates a distance field for antialiased black shapes drawn on a
+  // Generates an SDF for antialiased black shapes drawn on a
   // white canvas (e.g. drawn by the Canvas2D API).
-  //
-  // The edge of shapes has distance 0 and the inside of shapes has
-  // distance -.5.
-  public generateDistanceField(
+  public generateSDF(
     inputCanvas: HTMLCanvasElement,
     quality: JumpFloodQuality = "JFA"
   ) {
@@ -214,14 +210,14 @@ export class DistanceFieldGenerator {
     const height = inputCanvas.height;
     this._resizeOutputCanvasAndTextures(width, height);
 
-    this._setSeedsFromCanvas(inputCanvas, new Float32Array([1, 1, 1, 1]));
+    this._setSeedsFromCanvas(inputCanvas);
 
     const maxDimension = Math.max(width, height);
     let stepSize = nextPowerOfTwo(maxDimension) / 2;
     while (stepSize >= 1) {
       const isLastStep = stepSize / 2 < 1 && quality == "JFA";
       const output = isLastStep
-        ? JumpFloodOutput.FOR_SCREEN_ANTIALIASED
+        ? JumpFloodOutput.FOR_SCREEN
         : JumpFloodOutput.FOR_ANOTHER_STEP;
       this._runJumpFloodStep(stepSize, output);
       stepSize /= 2;
@@ -234,63 +230,15 @@ export class DistanceFieldGenerator {
       }
       case "JFA+1": {
         // Run the last step again
-        this._runJumpFloodStep(1, JumpFloodOutput.FOR_SCREEN_ANTIALIASED);
+        this._runJumpFloodStep(1, JumpFloodOutput.FOR_SCREEN);
         break;
       }
       case "JFA+2": {
         // Run the last two steps again
+        this._runJumpFloodStep(4, JumpFloodOutput.FOR_ANOTHER_STEP);
+        this._runJumpFloodStep(3, JumpFloodOutput.FOR_ANOTHER_STEP);
         this._runJumpFloodStep(2, JumpFloodOutput.FOR_ANOTHER_STEP);
-        this._runJumpFloodStep(1, JumpFloodOutput.FOR_SCREEN_ANTIALIASED);
-        break;
-      }
-    }
-  }
-
-  // Generates a distance field for the content in `inputCanvas`. Any pixel
-  // that isn't `backgroundColor` is treated as foreground content and will
-  // contribute to the distance field.
-  //
-  // `generateDistanceField` generates higher quality results. This is appropriate
-  // when you don't have control over the colors you're drawing or when it's
-  // not antialiased.
-  public generateRawDistanceField(
-    inputCanvas: HTMLCanvasElement,
-    backgroundColor: Color,
-    quality: JumpFloodQuality = "JFA+1"
-  ) {
-    const width = inputCanvas.width;
-    const height = inputCanvas.height;
-    this._resizeOutputCanvasAndTextures(width, height);
-
-    const { r, g, b, a } = backgroundColor;
-    this._setSeedsFromCanvas(inputCanvas, new Float32Array([r, g, b, a]));
-
-    const maxDimension = Math.max(width, height);
-    let stepSize = nextPowerOfTwo(maxDimension) / 2;
-
-    while (stepSize >= 1) {
-      const isLastStep = stepSize / 2 < 1 && quality == "JFA";
-      const output = isLastStep
-        ? JumpFloodOutput.FOR_SCREEN_NON_ANTIALIASED
-        : JumpFloodOutput.FOR_ANOTHER_STEP;
-      this._runJumpFloodStep(stepSize, output);
-      stepSize /= 2;
-    }
-
-    switch (quality) {
-      case "JFA": {
-        // We're done
-        break;
-      }
-      case "JFA+1": {
-        // Run the last step again
-        this._runJumpFloodStep(1, JumpFloodOutput.FOR_SCREEN_NON_ANTIALIASED);
-        break;
-      }
-      case "JFA+2": {
-        // Run the last two steps again
-        this._runJumpFloodStep(2, JumpFloodOutput.FOR_ANOTHER_STEP);
-        this._runJumpFloodStep(1, JumpFloodOutput.FOR_SCREEN_NON_ANTIALIASED);
+        this._runJumpFloodStep(1, JumpFloodOutput.FOR_SCREEN);
         break;
       }
     }
@@ -319,10 +267,7 @@ export class DistanceFieldGenerator {
   // We could build this into the first step of the algorithm but it's
   // cleaner as a separate step and when I attempted to remove it it only
   // gave a 2fps improvement on large canvasses.
-  private _setSeedsFromCanvas(
-    inputCanvas: HTMLCanvasElement,
-    backgroundColor: Float32Array
-  ) {
+  private _setSeedsFromCanvas(inputCanvas: HTMLCanvasElement) {
     if (!this._seedInputTexture) {
       throw new Error(
         `Expected _seedInputTexture to be set before calling setSeedsFromCanvas`
@@ -341,9 +286,6 @@ export class DistanceFieldGenerator {
       0
     );
     material.setUniformVec2(shaders.GLSLX_NAME_U_RESOLUTION, width, height);
-
-    const [r, g, b, a] = backgroundColor;
-    material.setUniformVec4(shaders.GLSLX_NAME_U_BACKGROUND_COLOR, r, g, b, a);
 
     this._gl.setRenderTarget(this._sourceTextureTarget);
     this._gl.setViewport(0, 0, width, height);
@@ -385,10 +327,6 @@ export class DistanceFieldGenerator {
         shaders.GLSLX_NAME_U_SEED_INPUT_TEXTURE,
         this._seedInputTexture,
         1
-      );
-      material.setUniformBool(
-        shaders.GLSLX_NAME_U_ANTIALIASED_DISTANCE,
-        output.antialiasedDistance
       );
     }
 
@@ -438,29 +376,17 @@ type Color = {
 
 type JumpFloodOutput = {
   format: "distance" | "seed-position";
-  // When format is distance, assume that the original input was a black
-  // image on white background and use its antialising values to output
-  // slightly more accurate distances.
-  antialiasedDistance: boolean;
   renderTarget: "texture" | "screen";
 };
 
 namespace JumpFloodOutput {
   export const FOR_ANOTHER_STEP: JumpFloodOutput = {
     format: "seed-position",
-    antialiasedDistance: false,
     renderTarget: "texture",
   };
 
-  export const FOR_SCREEN_NON_ANTIALIASED: JumpFloodOutput = {
+  export const FOR_SCREEN: JumpFloodOutput = {
     format: "distance",
-    antialiasedDistance: false,
-    renderTarget: "screen",
-  };
-
-  export const FOR_SCREEN_ANTIALIASED: JumpFloodOutput = {
-    format: "distance",
-    antialiasedDistance: true,
     renderTarget: "screen",
   };
 }

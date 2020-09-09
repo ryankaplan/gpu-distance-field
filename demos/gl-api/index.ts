@@ -33,7 +33,7 @@ document.addEventListener("DOMContentLoaded", () => {
   redrawSourceCanvas(sourceCanvas, window.innerWidth, window.innerHeight);
 
   const distanceFieldGenerator = new DistanceFieldGenerator();
-  distanceFieldGenerator.generateDistanceField(sourceCanvas);
+  distanceFieldGenerator.generateSDF(sourceCanvas, "JFA+2");
 
   const regl = Regl(document.body);
   const texture = regl.texture({
@@ -77,7 +77,7 @@ document.addEventListener("DOMContentLoaded", () => {
     void main () {
       // Start by drawing the glyph. If all we wanted to do was
       // put the glyph on screen, we could set gl_FragColor to
-      // vec4(vec3(value), 1.) and return early.
+      // vec4(vec3(dist), 1.) and return early.
       float dist = getDistanceValue(vUv);
       float value = clamp(dist, - .5, .5) + .5;
 

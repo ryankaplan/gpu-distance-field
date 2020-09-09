@@ -69,7 +69,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // is in source-canvas and store it in the distance-field canvas.
   const onFrame = () => {
     drawText(sourceCanvas);
-    generator.generateDistanceField(sourceCanvas, "JFA");
+    generator.generateSDF(sourceCanvas, "JFA");
     requestAnimationFrame(onFrame);
   };
   onFrame();
@@ -128,7 +128,7 @@ function destCanvasMouseMove(e: MouseEvent) {
     e.offsetY
   );
   const elt = document.getElementById("distance-label")! as HTMLDivElement;
-  elt.innerText = `Distance to nearest shape: ${distance | 0}px`;
+  elt.innerText = `Distance to nearest shape: ${((distance * 10) | 0) / 10}px`;
 }
 
 //////////////////////////////////////////////////////////////////////

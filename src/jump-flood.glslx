@@ -16,11 +16,6 @@ uniform vec2 uResolution;
 // What step size to use for the current round of JFA
 uniform int uStepSize;
 
-// The color that is *not* to be counted as seed.
-uniform vec4 uBackgroundColor;
-
-uniform bool uAntialiasedDistance;
-
 const vec4 RED = vec4(1.0, 0.0, 0.0, 1.0);
 const vec4 GREEN = vec4(0.0, 1.0, 0.0, 1.0);
 const vec4 BLUE = vec4(0.0, 0.0, 1.0, 1.0);
@@ -50,6 +45,10 @@ bool approxEqual(const vec2 a, const vec2 b) {
   );
 }
 
+bool inRange(float x, float lower, float higher) {
+  return clamp(x, lower, higher) == x;
+}
+
 bool validUv(const vec2 uv) {
   // This is a branch-less way of checking if uv is between 0 and 1.
   return clamp(uv, 0., 1.) == uv;
@@ -57,16 +56,18 @@ bool validUv(const vec2 uv) {
 
 const float BASE = 255.;
 
+// Allow for 8 decimal values in seed coordinate values.
+const float DECIMAL_DIVIDER = 8.;
+
 // Encode an (x, y) coordinate into a vec4. We split each co-ordinate
 // across two color channels so that the maximum coordinate value is
 // ~65k instead of 255.
 //
-// One tricky aspect is that this encoding doesn't handle fractional
-// values and the number that we're encoding is typically gl_FragCoord.xy
-// which is at the center of a pixel and typically a value like (3.5, 3.5).
-// So we floor the number when encoding it and add .5 when decoding.
+// We multiply by 10 before encoding and divide when decoding as a
+// hacky way to implement floating point numbers.
 vec4 encodePositionAsColor(in vec2 fragCoordXY) {
-  vec2 screenCoordinate = floor(fragCoordXY);
+  vec2 screenCoordinate = fragCoordXY;
+  screenCoordinate = floor(screenCoordinate * DECIMAL_DIVIDER);
   return vec4(
     floor(screenCoordinate.x / BASE),
     mod(screenCoordinate.x, BASE),
@@ -78,26 +79,138 @@ vec4 encodePositionAsColor(in vec2 fragCoordXY) {
 // Decodes a color value into an (x, y) coordinate.
 vec2 decodePositionFromColor(in vec4 color) {
   color *= BASE;
-  return vec2(
+  return (vec2(
     color.x * BASE + color.y,
     color.z * BASE + color.w
-  ) + .5;
+  )) / DECIMAL_DIVIDER;
 }
 
 // We don't have a way to encode "invalid" positions, so we treat
-// positions above 10000 as invalid. This would break on a 10000px
+// positions above 50000 as invalid. This would break on a 10000px
 // canvas but this code is probably super slow on a canvas of that
 // size so it doesn't matter.
-const float MAX_POSITION = 10000.;
+const float MAX_POSITION = (BASE * BASE - 1.) / DECIMAL_DIVIDER;
+
+vec4 sampleSeedTexture(vec2 fragCoord) {
+  vec2 gridUv = fragCoord.xy / uResolution;
+  vec2 gridUvFlippedY = vec2(gridUv.x, 1.0 - gridUv.y);
+  return texture2D(uSeedInputTexture, gridUvFlippedY);
+}
+
+struct Neighbor {
+  vec2 coord;
+  vec4 color;
+};
+
+const vec2 ONE_ZERO = vec2(1., 0.);
+
+// If a left or right neighbor of this shape is on the other side
+// of half grey, return it via `neighbor` and return true. Otherwise
+// return false.
+bool xNeighborOnOtherSideOfHalfGrey(vec2 fragCoord, vec4 selfColor, out Neighbor neighbor) {
+  vec2 leftCoord = fragCoord.xy - ONE_ZERO;
+  vec2 rightCoord = fragCoord.xy + ONE_ZERO;
+  vec4 left = sampleSeedTexture(leftCoord);
+  vec4 right = sampleSeedTexture(rightCoord);
+
+  vec2 desiredRange = selfColor.r > .5 ? vec2(0., .5) : vec2(.5, 1.);
+  if (inRange(left.r, desiredRange.x, desiredRange.y)) {
+    neighbor = Neighbor(leftCoord, left);
+    return true;
+  } else if (inRange(right.r, desiredRange.x, desiredRange.y)) {
+    neighbor = Neighbor(rightCoord, right);
+    return true;
+  }
+
+  return false;
+}
+
+// If an up- or down-neighbor neighbor of this shape is on the other side
+// of half grey, return it via `neighbor` and return true. Otherwise
+// return false.
+bool yNeighborOnOtherSideOfHalfGrey(vec2 fragCoord, vec4 selfColor, out Neighbor neighbor) {
+  vec2 downCoord = fragCoord.xy - ONE_ZERO.yx;
+  vec2 upCoord = fragCoord.xy + ONE_ZERO.yx;
+  vec4 down = sampleSeedTexture(downCoord);
+  vec4 up = sampleSeedTexture(upCoord);
+
+  // Look for a neighbor in this range
+  vec2 desiredRange = selfColor.r > .5 ? vec2(0., .5) : vec2(.5, 1.);
+
+  if (inRange(up.r, desiredRange.x, desiredRange.y)) {
+    neighbor = Neighbor(upCoord, up);
+    return true;
+  } else if (inRange(down.r, desiredRange.x, desiredRange.y)) {
+    neighbor = Neighbor(downCoord, down);
+    return true;
+  }
+
+  return false;
+}
 
 export void fPrepForJFA() {
-  vec2 gridUv = gl_FragCoord.xy / uResolution;
-  vec2 gridUvFlippedY = vec2(gridUv.x, 1.0 - gridUv.y);
-  vec4 pixel = texture2D(uSeedInputTexture, gridUvFlippedY);
-  if (approxEqual(pixel, uBackgroundColor)) {
-    gl_FragColor = encodePositionAsColor(vec2(MAX_POSITION + 1.));
-  } else {
+  vec4 selfColor = sampleSeedTexture(gl_FragCoord.xy);
+
+  if (abs(selfColor.r - .5) < .1) {
+    // This pixel is pretty close to middle grey which - in an antialiased
+    // image of black on white - means that it's distance 0 from our shape.
+    // Treat it as a seed.
     gl_FragColor = encodePositionAsColor(gl_FragCoord.xy);
+
+  } else {
+    // This is a difference from the original paper that lets us generate
+    // signed distance fields instead of regular distance fields. In the
+    // original paper, each seed location is a real pixel coordinate. In
+    // this implemenation, we generate fake seed locations that represent
+    // where we _think_ the boundary of the shape is based on antialiasing
+    // information.
+    //
+    // It's easiest to understand how this works with an example. Suppose
+    // this pixel is light grey and we find out that we the left neighbor
+    // is pretty dark grey. Then 50% grey must happen somewhere between
+    // this pixel and our left neighbor. The seed location that we encode
+    // in this pixel has an x-coordinate that is interpolated between us
+    // and our left neighbor based on our grey values. If this pixel is
+    // really close to 50% grey, then it's closer to us. If the neighbor
+    // is close to 50% grey, then it's closer to our neighbor.
+    //
+    // Consider the color value line below. The left edge is the color black
+    // and the right edge is white. Supose also that A is the value of our
+    // pixel and B is the value of our neighbor.
+    //
+    //                 A             .5      B
+    //  black |--------|--------------|------|--------------| white
+    //
+    // 50% grey is at the linear interpolation of our coordindate and our
+    // neighbors coordinate with t = (.5 - A) / (B - A).
+    //
+    // This only takes into account up/down/left/right neighbors, so it
+    // doesn't always look good for diagonal lines. I think it could be
+    // extended pretty well to handle them though.
+
+    // Start out assuming that we don't have any neighbors on the opposite
+    // side of 50% grey and that this pixel is not a seed.
+    vec2 seedCoord = vec2(MAX_POSITION + 1.);
+
+    // Account for neighbors on the horizontal axis
+    Neighbor neighbor;
+    if (xNeighborOnOtherSideOfHalfGrey(gl_FragCoord.xy, selfColor, neighbor)) {
+      float a = selfColor.r;
+      float b = neighbor.color.r;
+      float lerpFactor = abs(.5 - a) / abs(b - a);
+      seedCoord = mix(gl_FragCoord.xy, neighbor.coord, lerpFactor);
+    }
+
+    // Account for neighbors on the vertical axis
+    if (yNeighborOnOtherSideOfHalfGrey(gl_FragCoord.xy, selfColor, neighbor)) {
+      float a = selfColor.r;
+      float b = neighbor.color.r;
+      float lerpFactor = abs(.5 - a) / abs(b - a);
+      seedCoord.x = min(seedCoord.x, gl_FragCoord.x);
+      seedCoord.y = mix(gl_FragCoord.y, neighbor.coord.y, lerpFactor);
+    }
+
+    gl_FragColor = encodePositionAsColor(seedCoord);
   }
 }
 
@@ -188,19 +301,8 @@ export void fJumpFloodOutputDistance() {
   thisCell = runJFAStep(thisCell, uStepSize);
 
   vec4 seedImageColor = texture2D(uSeedInputTexture, vec2(gridUv.x, 1.0 - gridUv.y));
-  if (uAntialiasedDistance && seedImageColor != BLACK && seedImageColor != WHITE) {
-    // This is a grey pixel in an antialiased image. We should treat
-    // 50% grey as being distance 0 from the shape (because this would
-    // happen if the edge of the shape overlapped the center of this
-    // pixel). Black is distance - .5 and white is distance .5.
-    gl_FragColor = encodeDistanceFieldValue(seedImageColor.r);
-    return;
-  }
-
   vec2 seedLocation = decodePositionFromColor(thisCell);
   float dist = distance(seedLocation, gl_FragCoord.xy);
-  if (dist < EPSILON) {
-    dist = - .5;
-  }
-  gl_FragColor = encodeDistanceFieldValue(dist);
+  float sign = seedImageColor.r < .5 ? -1. : 1.;
+  gl_FragColor = encodeDistanceFieldValue(sign * dist);
 }
